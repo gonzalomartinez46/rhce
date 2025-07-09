@@ -6,5 +6,5 @@ users:
       job: developer
     - name: user3
       job: manager
-    - user: user4
+    - name: user4
       job: manager
