@@ -1,0 +1,110 @@
+haproxy/0000755000175000017500000000000017096405073016114 5ustar  devopsdevopshaproxy/README.md0000644000175000017500000000260017096405073017615 0ustar  devopsdevopsRole Name
+=========
+
+HAProxy role to configure a load balancer for a user-defined backend group.
+
+Requirements
+------------
+
+SELinux and firewalld must be enabled. Target hosts must be accessible from the load balancer.
+
+Role Variables
+--------------
+
+- `haproxy_backend_group`: name of the Ansible inventory group to load balance
+
+Dependencies
+------------
+
+None.
+
+Example Playbook
+----------------
+
+    - hosts: balancers
+      roles:
+        - role: haproxy
+          vars:
+            haproxy_backend_group: webservers
+
+License
+-------
+
+BSD
+
+Author Information
+------------------
+
+Generic HAProxy role for lab/enterprise use.
+
+haproxy/defaults/0000755000175000017500000000000017096405073017316 5ustar  devopsdevopshaproxy/defaults/main.yml0000644000175000017500000000023017096405073019337 0ustar  devopsdevops---
+haproxy_backend_group: webservers
+haproxy/handlers/0000755000175000017500000000000017096405073017071 5ustar  devopsdevopshaproxy/handlers/main.yml0000644000175000017500000000013017096405073019084 0ustar  devopsdevops---
+- name: Restart haproxy
+  service:
+    name: haproxy
+    state: restarted
+haproxy/meta/0000755000175000017500000000000017096405073016316 5ustar  devopsdevopshaproxy/meta/main.yml0000644000175000017500000000301017096405073019054 0ustar  devopsdevopsgalaxy_info:
+  author: your name
+  description: Generic HAProxy role
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: EL
+      versions:
+        - 8
+        - 9
+dependencies: []
+
+haproxy/tasks/0000755000175000017500000000000017096405073017277 5ustar  devopsdevopshaproxy/tasks/main.yml0000644000175000017500000000174017096405073019355 0ustar  devopsdevops---
+- name: Install haproxy
+  dnf:
+    name: haproxy
+    state: present
+
+- name: Allow traffic on port 80 (firewalld)
+  firewalld:
+    port: 80/tcp
+    permanent: true
+    state: enabled
+    immediate: yes
+
+- name: Set SELinux context for haproxy config
+  sefcontext:
+    target: '/etc/haproxy(/.*)?'
+    setype: haproxy_etc_t
+  notify: Restart haproxy
+
+- name: Create haproxy config file
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart haproxy
+
+- name: Enable and start haproxy
+  service:
+    name: haproxy
+    state: started
+    enabled: true
+
+haproxy/templates/0000755000175000017500000000000017096405073017341 5ustar  devopsdevopshaproxy/templates/haproxy.cfg.j2000064400017500001750000000063217096405073019516 0ustar  devopsdevopsglobal
+    daemon
+    maxconn 256
+
+defaults
+    mode http
+    timeout connect 5000ms
+    timeout client 50000ms
+    timeout server 50000ms
+
+frontend http_front
+    bind *:80
+    default_backend http_back
+
+backend http_back
+{% for host in groups[haproxy_backend_group] %}
+    server {{ host }} {{ hostvars[host].ansible_host | default(host) }}:80 check
+{% endfor %}
